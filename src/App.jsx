@@ -11,7 +11,7 @@ import { HiMenu, HiX } from 'react-icons/hi';
 
 export default function App() {
   const { user, skippedLogin } = useAuthStatus();
-  const guestId = localStorage.getItem("guestId") || null;
+  const [guestId, setGuestId] = useState(localStorage.getItem("guestId") || null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(null);
@@ -24,6 +24,15 @@ export default function App() {
 
   const [refreshHistoryFlag, setRefreshHistoryFlag] = useState(false);
   const triggerHistoryRefresh = () => setRefreshHistoryFlag(prev => !prev);
+
+  // Generate guest ID if missing
+  useEffect(() => {
+    if (!guestId && skippedLogin) {
+      const newGuestId = `guest_${Date.now()}`;
+      localStorage.setItem("guestId", newGuestId);
+      setGuestId(newGuestId);
+    }
+  }, [guestId, skippedLogin]);
 
   // Load collections
   const loadCollections = async () => {
@@ -67,12 +76,10 @@ export default function App() {
   };
 
   const handleRequestComplete = async (response) => {
-    setResponseData(response);
-
-    if (!response?.requestId) return;
+    if (!response) return;
 
     const newItem = {
-      id: response.requestId,
+      id: response.requestId || `guest_${Date.now()}`,
       url: response.url,
       method: response.method,
       headers: response.headers,
@@ -83,11 +90,7 @@ export default function App() {
     };
 
     if (user) {
-      await fetch(`${import.meta.env.VITE_BACKEND_URL}/proxy/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newItem),
-      });
+      // No extra save needed; backend proxy already stores it
     } else if (skippedLogin) {
       const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
       localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
