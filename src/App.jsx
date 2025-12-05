@@ -34,12 +34,10 @@ export default function App() {
     }
   }, [guestId, skippedLogin]);
 
-  // ----------------------------
-  // Load Collections
-  // ----------------------------
+  // Load collections
   const loadCollections = async () => {
     try {
-      if (user) {
+      if (user?.uid) {
         const data = await getCollections(user.uid);
         setCollections(data);
       } else if (skippedLogin) {
@@ -51,32 +49,26 @@ export default function App() {
     }
   };
 
-  // ----------------------------
-  // Load History for Logged-in Users
-  // ----------------------------
-  useEffect(() => {
-    if (user) {
-      const loadUserHistory = async () => {
-        try {
-          const data = await fetchHistory(user.uid);
-          setHistoryItems(data);
-        } catch (err) {
-          console.error("Failed to fetch history:", err);
-        }
-      };
-      loadUserHistory();
+  // Load history
+  const loadHistory = async () => {
+    try {
+      if (user?.uid) {
+        const data = await fetchHistory(user.uid);
+        setHistoryItems(data);
+      } else if (skippedLogin && guestId) {
+        const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
+        setHistoryItems(localHistory);
+      }
+    } catch (err) {
+      console.error("Error loading history:", err);
     }
-  }, [user, refreshHistoryFlag]);
+  };
 
-  // ----------------------------
-  // Load History for Guest Users
-  // ----------------------------
+  // Load collections and history whenever user, guestId, or refresh flag changes
   useEffect(() => {
-    if (skippedLogin && guestId) {
-      const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
-      setHistoryItems(localHistory);
-    }
-  }, [skippedLogin, guestId, refreshHistoryFlag]);
+    loadCollections();
+    loadHistory();
+  }, [user, guestId, skippedLogin, refreshHistoryFlag]);
 
   const loadHistoryItem = (item) => {
     setSelectedHistoryItem(item);
@@ -84,9 +76,6 @@ export default function App() {
     setPanelOpen(null);
   };
 
-  // ----------------------------
-  // Handle Request Completion
-  // ----------------------------
   const handleRequestComplete = async (response) => {
     if (!response) return;
 
@@ -101,8 +90,8 @@ export default function App() {
       userId: user?.uid || null,
     };
 
-    if (user) {
-      // Logged-in users: backend already stores history
+    if (user?.uid) {
+      // Backend handles storage automatically
     } else if (skippedLogin) {
       const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
       localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
@@ -114,30 +103,28 @@ export default function App() {
     triggerHistoryRefresh();
   };
 
-  // ----------------------------
-  // Handle Collection Creation
-  // ----------------------------
   const handleCreateCollection = async (name) => {
-    if (user) {
+    if (user?.uid) {
       const created = await createCollection(name, user.uid);
       setCollections(prev => [created, ...prev]);
       return created;
     } else if (skippedLogin) {
       const localCollections = JSON.parse(localStorage.getItem("collections") || "[]");
-      const newCollection = { id: `col_${Date.now()}`, name, requestIds: [] };
+      const newCollection = {
+        id: `col_${Date.now()}`,
+        name,
+        requestIds: [],
+      };
       localStorage.setItem("collections", JSON.stringify([newCollection, ...localCollections]));
       setCollections([newCollection, ...localCollections]);
       return newCollection;
     }
   };
 
-  // ----------------------------
-  // Handle Adding Request to Collection
-  // ----------------------------
   const handleAddToCollection = async (collection) => {
     if (!selectedHistoryItem) return;
 
-    if (user) {
+    if (user?.uid) {
       await addRequestToCollection(collection.id, selectedHistoryItem.id);
       await loadCollections();
     } else if (skippedLogin) {
@@ -160,16 +147,7 @@ export default function App() {
     setShowAddToCollection(false);
   };
 
-  // ----------------------------
-  // Initial Collections Load
-  // ----------------------------
-  useEffect(() => {
-    loadCollections();
-  }, [user, skippedLogin]);
-
-  // ----------------------------
-  // Return UI
-  // ----------------------------
+  // UI remains unchanged
   return (
     <div className="flex h-screen w-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
       {/* Desktop Sidebar */}
