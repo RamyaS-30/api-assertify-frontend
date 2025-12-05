@@ -47,33 +47,35 @@ export default function App() {
 
   // Load collections
   const loadCollections = async () => {
-    try {
-      let data;
-      if (currentUser) {
-        data = await getCollections();
-      } else {
-        data = loadLocalCollections();
-      }
-      setCollections(data);
-    } catch (err) {
-      console.error("Error loading collections", err);
+  try {
+    let data;
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      data = await getCollections(token);
+    } else {
+      data = loadLocalCollections();
     }
-  };
+    setCollections(data);
+  } catch (err) {
+    console.error("Error loading collections", err);
+  }
+};
 
   // Load full history
   const loadHistory = async () => {
-    try {
-      let data;
-      if (currentUser) {
-        data = await fetchHistory(); // backend for logged-in users
-      } else {
-        data = loadLocalHistory(); // localStorage for guest
-      }
-      setHistoryItems(data);
-    } catch (err) {
-      console.error("Error loading history:", err);
+  try {
+    let data;
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      data = await fetchHistory(token);
+    } else {
+      data = loadLocalHistory();
     }
-  };
+    setHistoryItems(data);
+  } catch (err) {
+    console.error("Error loading history:", err);
+  }
+};
 
   // Initial load
   useEffect(() => {
@@ -145,39 +147,41 @@ export default function App() {
 
   // Create new collection
   const handleCreateCollection = async (name) => {
-    let created;
-    if (currentUser) {
-      created = await createCollection(name);
-    } else {
-      created = { id: Date.now().toString(), name, requests: [] };
-      const updated = [created, ...collections];
-      setCollections(updated);
-      saveLocalCollections(updated);
-    }
-    setCollections(prev => [created, ...prev]);
-    return created;
-  };
+  let created;
+  if (currentUser) {
+    const token = await currentUser.getIdToken();
+    created = await createCollection(name, token);
+  } else {
+    created = { id: Date.now().toString(), name, requests: [] };
+    const updated = [created, ...collections];
+    setCollections(updated);
+    saveLocalCollections(updated);
+  }
+  setCollections(prev => [created, ...prev]);
+  return created;
+};
 
   // Add selected history item to collection
   const handleAddToCollection = async (collection) => {
-    if (!selectedHistoryItem) return;
+  if (!selectedHistoryItem) return;
 
-    if (currentUser) {
-      await addRequestToCollection(collection.id, selectedHistoryItem.id);
-      await loadCollections();
-    } else {
-      const updatedCollections = collections.map(col => {
-        if (col.id === collection.id) {
-          return { ...col, requests: [...(col.requests || []), selectedHistoryItem.id] };
-        }
-        return col;
-      });
-      setCollections(updatedCollections);
-      saveLocalCollections(updatedCollections);
-    }
+  if (currentUser) {
+    const token = await currentUser.getIdToken();
+    await addRequestToCollection(collection.id, selectedHistoryItem.id, token);
+    await loadCollections();
+  } else {
+    const updatedCollections = collections.map(col => {
+      if (col.id === collection.id) {
+        return { ...col, requests: [...(col.requests || []), selectedHistoryItem.id] };
+      }
+      return col;
+    });
+    setCollections(updatedCollections);
+    saveLocalCollections(updatedCollections);
+  }
 
-    setShowAddToCollection(false);
-  };
+  setShowAddToCollection(false);
+};
 
   // Expose global function for legacy usage (optional)
   window.handleAddHistoryToCollection = (historyItem) => {
