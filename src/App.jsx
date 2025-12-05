@@ -35,13 +35,14 @@ export default function App() {
 
   // Load full history
   const loadHistory = async () => {
-    try {
-      const data = await fetchHistory(); // returns array of all history items
-      setHistoryItems(data);
-    } catch (err) {
-      console.error("Error loading history:", err);
-    }
-  };
+  if (user) {
+    const data = await fetch(`/api/history?userId=${user.uid}`).then(res => res.json());
+    setHistoryItems(data);
+  } else if (skippedLogin && guestId) {
+    const data = JSON.parse(localStorage.getItem("historyItems") || "[]");
+    setHistoryItems(data);
+  }
+};
 
   // Initial load
   useEffect(() => {
