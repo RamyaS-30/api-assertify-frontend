@@ -41,32 +41,32 @@ export default function App() {
   // Load collections
   const loadCollections = async () => {
     try {
-      let data;
       if (currentUser) {
         const token = await currentUser.getIdToken();
-        data = await getCollections(token);
+        const data = await getCollections(token);
+        setCollections(data || []);
       } else {
-        data = loadLocalCollections();
+        setCollections(loadLocalCollections());
       }
-      setCollections(data);
     } catch (err) {
       console.error("Error loading collections", err);
+      if (!currentUser) setCollections(loadLocalCollections());
     }
   };
 
   // Load history
   const loadHistory = async () => {
     try {
-      let data;
       if (currentUser) {
         const token = await currentUser.getIdToken();
-        data = await fetchHistory(token);
+        const data = await fetchHistory(token);
+        setHistoryItems(data || []);
       } else {
-        data = loadLocalHistory();
+        setHistoryItems(loadLocalHistory());
       }
-      setHistoryItems(data);
     } catch (err) {
       console.error("Error loading history:", err);
+      if (!currentUser) setHistoryItems(loadLocalHistory());
     }
   };
 
