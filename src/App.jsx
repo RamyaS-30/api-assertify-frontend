@@ -34,7 +34,9 @@ export default function App() {
     }
   }, [guestId, skippedLogin]);
 
-  // Load collections
+  // ----------------------------
+  // Load Collections
+  // ----------------------------
   const loadCollections = async () => {
     try {
       if (user) {
@@ -49,25 +51,32 @@ export default function App() {
     }
   };
 
-  // Load history
-  const loadHistory = async () => {
-    try {
-      if (user) {
-        const data = await fetchHistory(user.uid);
-        setHistoryItems(data);
-      } else if (skippedLogin) {
-        const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
-        setHistoryItems(localHistory);
-      }
-    } catch (err) {
-      console.error("Error loading history:", err);
-    }
-  };
-
+  // ----------------------------
+  // Load History for Logged-in Users
+  // ----------------------------
   useEffect(() => {
-    loadCollections();
-    loadHistory();
-  }, [user, skippedLogin, refreshHistoryFlag]);
+    if (user) {
+      const loadUserHistory = async () => {
+        try {
+          const data = await fetchHistory(user.uid);
+          setHistoryItems(data);
+        } catch (err) {
+          console.error("Failed to fetch history:", err);
+        }
+      };
+      loadUserHistory();
+    }
+  }, [user, refreshHistoryFlag]);
+
+  // ----------------------------
+  // Load History for Guest Users
+  // ----------------------------
+  useEffect(() => {
+    if (skippedLogin && guestId) {
+      const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
+      setHistoryItems(localHistory);
+    }
+  }, [skippedLogin, guestId, refreshHistoryFlag]);
 
   const loadHistoryItem = (item) => {
     setSelectedHistoryItem(item);
@@ -75,6 +84,9 @@ export default function App() {
     setPanelOpen(null);
   };
 
+  // ----------------------------
+  // Handle Request Completion
+  // ----------------------------
   const handleRequestComplete = async (response) => {
     if (!response) return;
 
@@ -90,7 +102,7 @@ export default function App() {
     };
 
     if (user) {
-      // No extra save needed; backend proxy already stores it
+      // Logged-in users: backend already stores history
     } else if (skippedLogin) {
       const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
       localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
@@ -102,6 +114,9 @@ export default function App() {
     triggerHistoryRefresh();
   };
 
+  // ----------------------------
+  // Handle Collection Creation
+  // ----------------------------
   const handleCreateCollection = async (name) => {
     if (user) {
       const created = await createCollection(name, user.uid);
@@ -109,17 +124,16 @@ export default function App() {
       return created;
     } else if (skippedLogin) {
       const localCollections = JSON.parse(localStorage.getItem("collections") || "[]");
-      const newCollection = {
-        id: `col_${Date.now()}`,
-        name,
-        requestIds: [],
-      };
+      const newCollection = { id: `col_${Date.now()}`, name, requestIds: [] };
       localStorage.setItem("collections", JSON.stringify([newCollection, ...localCollections]));
       setCollections([newCollection, ...localCollections]);
       return newCollection;
     }
   };
 
+  // ----------------------------
+  // Handle Adding Request to Collection
+  // ----------------------------
   const handleAddToCollection = async (collection) => {
     if (!selectedHistoryItem) return;
 
@@ -146,6 +160,16 @@ export default function App() {
     setShowAddToCollection(false);
   };
 
+  // ----------------------------
+  // Initial Collections Load
+  // ----------------------------
+  useEffect(() => {
+    loadCollections();
+  }, [user, skippedLogin]);
+
+  // ----------------------------
+  // Return UI
+  // ----------------------------
   return (
     <div className="flex h-screen w-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
       {/* Desktop Sidebar */}
