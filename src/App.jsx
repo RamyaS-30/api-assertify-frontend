@@ -7,6 +7,8 @@ import AddToCollectionModal from './components/AddToCollectionModal';
 import { getCollections, createCollection, addRequestToCollection } from './api/collections';
 import { fetchHistory } from './api/history';
 import { HiMenu, HiX } from 'react-icons/hi';
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase"; // your firebase config
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -23,10 +25,35 @@ export default function App() {
   const [refreshHistoryFlag, setRefreshHistoryFlag] = useState(false);
   const triggerHistoryRefresh = () => setRefreshHistoryFlag(prev => !prev);
 
+  // Current User
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // LocalStorage keys and helpers for guest users
+  const LOCAL_HISTORY_KEY = "guestHistory";
+  const LOCAL_COLLECTIONS_KEY = "guestCollections";
+
+  const loadLocalHistory = () => JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY)) || [];
+  const saveLocalHistory = (history) => localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(history));
+
+  const loadLocalCollections = () => JSON.parse(localStorage.getItem(LOCAL_COLLECTIONS_KEY)) || [];
+  const saveLocalCollections = (collections) => localStorage.setItem(LOCAL_COLLECTIONS_KEY, JSON.stringify(collections));
+
   // Load collections
   const loadCollections = async () => {
     try {
-      const data = await getCollections();
+      let data;
+      if (currentUser) {
+        data = await getCollections();
+      } else {
+        data = loadLocalCollections();
+      }
       setCollections(data);
     } catch (err) {
       console.error("Error loading collections", err);
@@ -36,7 +63,12 @@ export default function App() {
   // Load full history
   const loadHistory = async () => {
     try {
-      const data = await fetchHistory(); // returns array of all history items
+      let data;
+      if (currentUser) {
+        data = await fetchHistory(); // backend for logged-in users
+      } else {
+        data = loadLocalHistory(); // localStorage for guest
+      }
       setHistoryItems(data);
     } catch (err) {
       console.error("Error loading history:", err);
@@ -47,7 +79,19 @@ export default function App() {
   useEffect(() => {
     loadCollections();
     loadHistory();
-  }, []);
+  }, [currentUser]);
+
+  // Optional: migrate guest data if user logs in
+  useEffect(() => {
+    if (currentUser) {
+      const guestHistory = loadLocalHistory();
+      const guestCollections = loadLocalCollections();
+      // Push to backend if needed (optional)
+      // TODO: implement Firebase migration API calls if desired
+      localStorage.removeItem(LOCAL_HISTORY_KEY);
+      localStorage.removeItem(LOCAL_COLLECTIONS_KEY);
+    }
+  }, [currentUser]);
 
   // Close dropdown if clicking outside
   useEffect(() => {
@@ -86,7 +130,12 @@ export default function App() {
         responseData: response.data,
       };
 
-      setHistoryItems(prev => [newItem, ...prev]);
+      setHistoryItems(prev => {
+        const updated = [newItem, ...prev];
+        if (!currentUser) saveLocalHistory(updated);
+        return updated;
+      });
+
       setSelectedHistoryItem(newItem);
       setShowAddToCollection(true);
     }
@@ -96,7 +145,15 @@ export default function App() {
 
   // Create new collection
   const handleCreateCollection = async (name) => {
-    const created = await createCollection(name);
+    let created;
+    if (currentUser) {
+      created = await createCollection(name);
+    } else {
+      created = { id: Date.now().toString(), name, requests: [] };
+      const updated = [created, ...collections];
+      setCollections(updated);
+      saveLocalCollections(updated);
+    }
     setCollections(prev => [created, ...prev]);
     return created;
   };
@@ -104,9 +161,22 @@ export default function App() {
   // Add selected history item to collection
   const handleAddToCollection = async (collection) => {
     if (!selectedHistoryItem) return;
-    await addRequestToCollection(collection.id, selectedHistoryItem.id);
-    await loadCollections(); // refresh collections after adding
-    setShowAddToCollection(false); // close modal
+
+    if (currentUser) {
+      await addRequestToCollection(collection.id, selectedHistoryItem.id);
+      await loadCollections();
+    } else {
+      const updatedCollections = collections.map(col => {
+        if (col.id === collection.id) {
+          return { ...col, requests: [...(col.requests || []), selectedHistoryItem.id] };
+        }
+        return col;
+      });
+      setCollections(updatedCollections);
+      saveLocalCollections(updatedCollections);
+    }
+
+    setShowAddToCollection(false);
   };
 
   // Expose global function for legacy usage (optional)
