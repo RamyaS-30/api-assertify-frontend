@@ -38,7 +38,7 @@ export default function App() {
   if (user) {
     const data = await fetch(`/api/history?userId=${user.uid}`).then(res => res.json());
     setHistoryItems(data);
-  } else if (skippedLogin && guestId) {
+  } else if (skippedLogin) {
     const data = JSON.parse(localStorage.getItem("historyItems") || "[]");
     setHistoryItems(data);
   }
@@ -77,29 +77,19 @@ export default function App() {
   // When API form sends a request
   const handleRequestComplete = (response) => {
   setResponseData(response);
-
-  const newItem = {
-    id: response.requestId,
-    url: response.url,
-    method: response.method,
-    headers: response.headers,
-    responseData: response.data,
-  };
+  const newItem = { id: response.requestId, url: response.url, method: response.method, headers: response.headers, responseData: response.data };
 
   if (user) {
-    // save to backend for logged-in users
-    fetch("/api/history", {
+    fetch("/api/proxy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...newItem, userId: user.uid }),
     });
-  } else if (skippedLogin && guestId) {
-    // save locally for guest
+  } else if (skippedLogin) {
     const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
     localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
   }
 
-  // update UI
   setHistoryItems(prev => [newItem, ...prev]);
   setSelectedHistoryItem(newItem);
 };
