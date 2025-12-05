@@ -75,24 +75,33 @@ export default function App() {
 
   // When API form sends a request
   const handleRequestComplete = (response) => {
-    setResponseData(response);
+  setResponseData(response);
 
-    if (response?.requestId) {
-      const newItem = {
-        id: response.requestId,
-        url: response.url,
-        method: response.method,
-        headers: response.headers,
-        responseData: response.data,
-      };
-
-      setHistoryItems(prev => [newItem, ...prev]);
-      setSelectedHistoryItem(newItem);
-      setShowAddToCollection(true);
-    }
-
-    triggerHistoryRefresh();
+  const newItem = {
+    id: response.requestId,
+    url: response.url,
+    method: response.method,
+    headers: response.headers,
+    responseData: response.data,
   };
+
+  if (user) {
+    // save to backend for logged-in users
+    fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newItem, userId: user.uid }),
+    });
+  } else if (skippedLogin && guestId) {
+    // save locally for guest
+    const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
+    localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
+  }
+
+  // update UI
+  setHistoryItems(prev => [newItem, ...prev]);
+  setSelectedHistoryItem(newItem);
+};
 
   // Create new collection
   const handleCreateCollection = async (name) => {
