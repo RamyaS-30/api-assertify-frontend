@@ -1,11 +1,14 @@
-import axios from 'axios';
+// api/history.js
+import axios from "axios";
 
 export const fetchHistory = async (token) => {
+  if (!token) return []; // guest users handled in App.jsx via localStorage
+
   try {
     const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/history`, {
       headers: {
-        Authorization: `Bearer ${token}`
-      }
+        Authorization: `Bearer ${token}`,
+      },
     });
     return res.data;
   } catch (err) {
