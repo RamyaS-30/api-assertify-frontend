@@ -6,7 +6,7 @@ import ApiForm from './components/ApiForm';
 import ResponseViewer from './components/ResponseViewer';
 import AddToCollectionModal from './components/AddToCollectionModal';
 import { getCollections, createCollection, addRequestToCollection } from './api/collections';
-import { fetchHistory } from './api/history';
+import { fetchHistory, saveHistoryItem } from './api/history';
 import { HiMenu, HiX } from 'react-icons/hi';
 
 export default function App() {
@@ -37,7 +37,7 @@ export default function App() {
   // Load collections
   const loadCollections = async () => {
     try {
-      if (user?.uid) {
+      if (user) {
         const data = await getCollections(user.uid);
         setCollections(data);
       } else if (skippedLogin) {
@@ -52,23 +52,22 @@ export default function App() {
   // Load history
   const loadHistory = async () => {
     try {
-      if (user?.uid) {
-        const data = await fetchHistory(user.uid);
-        setHistoryItems(data);
-      } else if (skippedLogin && guestId) {
+      const data = user ? await fetchHistory(user.uid) : await fetchHistory(guestId);
+      setHistoryItems(data);
+    } catch (err) {
+      console.error("Error fetching history:", err);
+      // Fallback for guest users
+      if (skippedLogin) {
         const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
         setHistoryItems(localHistory);
       }
-    } catch (err) {
-      console.error("Error loading history:", err);
     }
   };
 
-  // Load collections and history whenever user, guestId, or refresh flag changes
   useEffect(() => {
     loadCollections();
     loadHistory();
-  }, [user, guestId, skippedLogin, refreshHistoryFlag]);
+  }, [user, skippedLogin, guestId, refreshHistoryFlag]);
 
   const loadHistoryItem = (item) => {
     setSelectedHistoryItem(item);
@@ -87,24 +86,22 @@ export default function App() {
       body: response.body,
       responseData: response.data,
       createdAt: new Date(),
-      userId: user?.uid || null,
+      userId: user?.uid || guestId || null,
     };
 
-    if (user?.uid) {
-      // Backend handles storage automatically
-    } else if (skippedLogin) {
-      const localHistory = JSON.parse(localStorage.getItem("historyItems") || "[]");
-      localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
+    try {
+      await saveHistoryItem(newItem);
+      setHistoryItems(prev => [newItem, ...prev]);
+      setSelectedHistoryItem(newItem);
+      setShowAddToCollection(true);
+      triggerHistoryRefresh();
+    } catch (err) {
+      console.error("Failed to save history item:", err);
     }
-
-    setHistoryItems(prev => [newItem, ...prev]);
-    setSelectedHistoryItem(newItem);
-    setShowAddToCollection(true);
-    triggerHistoryRefresh();
   };
 
   const handleCreateCollection = async (name) => {
-    if (user?.uid) {
+    if (user) {
       const created = await createCollection(name, user.uid);
       setCollections(prev => [created, ...prev]);
       return created;
@@ -124,7 +121,7 @@ export default function App() {
   const handleAddToCollection = async (collection) => {
     if (!selectedHistoryItem) return;
 
-    if (user?.uid) {
+    if (user) {
       await addRequestToCollection(collection.id, selectedHistoryItem.id);
       await loadCollections();
     } else if (skippedLogin) {
@@ -147,7 +144,6 @@ export default function App() {
     setShowAddToCollection(false);
   };
 
-  // UI remains unchanged
   return (
     <div className="flex h-screen w-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
       {/* Desktop Sidebar */}
