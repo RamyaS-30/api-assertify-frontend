@@ -5,10 +5,10 @@ import ApiForm from './components/ApiForm';
 import ResponseViewer from './components/ResponseViewer';
 import AddToCollectionModal from './components/AddToCollectionModal';
 import { getCollections, createCollection, addRequestToCollection } from './api/collections';
-import { fetchHistory, sendApiRequest } from './api/history'; // create wrapper to pass token
+import { fetchHistory, sendApiRequest } from './api/history';
 import { HiMenu, HiX } from 'react-icons/hi';
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "./firebase"; // your firebase config
+import { auth } from "./firebase";
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -17,15 +17,12 @@ export default function App() {
   const [historyItems, setHistoryItems] = useState([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
 
-  // Collections
   const [collections, setCollections] = useState([]);
   const [showAddToCollection, setShowAddToCollection] = useState(false);
 
-  // History refresh flag
   const [refreshHistoryFlag, setRefreshHistoryFlag] = useState(false);
   const triggerHistoryRefresh = () => setRefreshHistoryFlag(prev => !prev);
 
-  // Current User
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
@@ -35,7 +32,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // LocalStorage keys for guest users
   const LOCAL_HISTORY_KEY = "guestHistory";
   const LOCAL_COLLECTIONS_KEY = "guestCollections";
 
@@ -50,14 +46,15 @@ export default function App() {
     try {
       let data;
       if (currentUser) {
-        const token = await currentUser.getIdToken();
+        const token = await currentUser.getIdToken(true);
         data = await getCollections(token);
       } else {
         data = loadLocalCollections();
       }
-      setCollections(data);
+      setCollections(data || []);
     } catch (err) {
       console.error("Error loading collections", err);
+      setCollections([]); // fallback
     }
   };
 
@@ -66,24 +63,26 @@ export default function App() {
     try {
       let data;
       if (currentUser) {
-        const token = await currentUser.getIdToken();
+        const token = await currentUser.getIdToken(true);
         data = await fetchHistory(token);
       } else {
         data = loadLocalHistory();
       }
-      setHistoryItems(data);
+      setHistoryItems(data || []);
     } catch (err) {
       console.error("Error loading history:", err);
+      setHistoryItems([]); // fallback
     }
   };
 
-  // Initial load
+  // Load data only after currentUser is initialized
   useEffect(() => {
-    loadCollections();
-    loadHistory();
+    if (currentUser !== null) {
+      loadCollections();
+      loadHistory();
+    }
   }, [currentUser]);
 
-  // Logout function (clears token and guest data)
   const handleLogout = async () => {
     await signOut(auth);
     setCurrentUser(null);
@@ -116,7 +115,6 @@ export default function App() {
     closePanel();
   };
 
-  // Handle API request response
   const handleRequestComplete = async (response) => {
     setResponseData(response);
 
@@ -130,7 +128,7 @@ export default function App() {
 
     setHistoryItems(prev => {
       const updated = [newItem, ...prev];
-      if (!currentUser) saveLocalHistory(updated); // Save guest history locally
+      if (!currentUser) saveLocalHistory(updated);
       return updated;
     });
 
@@ -140,11 +138,10 @@ export default function App() {
     triggerHistoryRefresh();
   };
 
-  // Create new collection
   const handleCreateCollection = async (name) => {
     let created;
     if (currentUser) {
-      const token = await currentUser.getIdToken();
+      const token = await currentUser.getIdToken(true);
       created = await createCollection(name, token);
     } else {
       created = { id: Date.now().toString(), name, requests: [] };
@@ -156,12 +153,11 @@ export default function App() {
     return created;
   };
 
-  // Add history item to collection
   const handleAddToCollection = async (collection) => {
     if (!selectedHistoryItem) return;
 
     if (currentUser) {
-      const token = await currentUser.getIdToken();
+      const token = await currentUser.getIdToken(true);
       await addRequestToCollection(collection.id, selectedHistoryItem.id, token);
       await loadCollections();
     } else {
@@ -189,12 +185,12 @@ export default function App() {
       {/* Desktop Sidebar */}
       <div className="hidden md:flex flex-[1] flex-col h-full border-r border-gray-300 dark:border-gray-700">
         <div className="h-1/2 overflow-y-auto">
-          <Sidebar loadHistoryItem={loadHistoryItem} refreshFlag={refreshHistoryFlag} historyItems={historyItems} />
+          <Sidebar loadHistoryItem={loadHistoryItem} refreshFlag={refreshHistoryFlag} historyItems={historyItems || []} />
         </div>
         <div className="h-1/2 overflow-y-auto border-t border-gray-300 dark:border-gray-700">
           <CollectionsSidebar
-            collections={collections}
-            historyItems={historyItems}
+            collections={collections || []}
+            historyItems={historyItems || []}
             onSelectCollection={loadHistoryItem}
             onCreateCollection={handleCreateCollection}
             onAddToCollection={handleAddToCollection}
@@ -238,12 +234,12 @@ export default function App() {
         </div>
         <div className="flex flex-col h-full">
           <div className="h-1/2 overflow-y-auto pr-1">
-            <Sidebar loadHistoryItem={loadHistoryItem} refreshFlag={refreshHistoryFlag} historyItems={historyItems} />
+            <Sidebar loadHistoryItem={loadHistoryItem} refreshFlag={refreshHistoryFlag} historyItems={historyItems || []} />
           </div>
           <div className="h-1/2 overflow-y-auto border-t border-gray-300 dark:border-gray-700 pr-1">
             <CollectionsSidebar
-              collections={collections}
-              historyItems={historyItems}
+              collections={collections || []}
+              historyItems={historyItems || []}
               onSelectCollection={loadHistoryItem}
               onCreateCollection={handleCreateCollection}
               onAddToCollection={handleAddToCollection}
@@ -267,7 +263,7 @@ export default function App() {
       {showAddToCollection && (
         <AddToCollectionModal
           requestId={selectedHistoryItem?.id}
-          collections={collections}
+          collections={collections || []}
           onClose={() => setShowAddToCollection(false)}
           onSuccess={async () => {
             setShowAddToCollection(false);
