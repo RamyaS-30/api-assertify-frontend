@@ -1,45 +1,55 @@
-import { useState, useEffect } from 'react';
-import useAuthStatus from './hooks/useAuthStatus';
-import Sidebar from './components/Sidebar';
-import CollectionsSidebar from './components/CollectionsSidebar';
-import ApiForm from './components/ApiForm';
-import ResponseViewer from './components/ResponseViewer';
-import AddToCollectionModal from './components/AddToCollectionModal';
-import { getCollections, createCollection, addRequestToCollection } from './api/collections';
-import { HiMenu, HiX } from 'react-icons/hi';
+import { useState, useEffect } from "react";
+import useAuthStatus from "./hooks/useAuthStatus";
+import Sidebar from "./components/Sidebar";
+import CollectionsSidebar from "./components/CollectionsSidebar";
+import ApiForm from "./components/ApiForm";
+import ResponseViewer from "./components/ResponseViewer";
+import AddToCollectionModal from "./components/AddToCollectionModal";
+import { getCollections, createCollection, addRequestToCollection } from "./api/collections";
 
 export default function App() {
   const { user, skippedLogin } = useAuthStatus();
-  const guestId = localStorage.getItem("guestId") || null;
+
+  // Create guestId if not present
+  const [guestId, setGuestId] = useState(() => {
+    let id = localStorage.getItem("guestId");
+    if (!id) {
+      id = "guest_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      localStorage.setItem("guestId", id);
+    }
+    return id;
+  });
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(null);
   const [responseData, setResponseData] = useState(null);
   const [historyItems, setHistoryItems] = useState([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
-
   const [collections, setCollections] = useState([]);
   const [showAddToCollection, setShowAddToCollection] = useState(false);
-
   const [refreshHistoryFlag, setRefreshHistoryFlag] = useState(false);
-  const triggerHistoryRefresh = () => setRefreshHistoryFlag(prev => !prev);
 
-  // Load collections
+  const triggerHistoryRefresh = () => setRefreshHistoryFlag((prev) => !prev);
+
+  // Determine current userId (logged-in or guest)
+  const currentUserId = user?.uid || guestId;
+
+  // Load collections from backend
   const loadCollections = async () => {
     try {
-      const data = await getCollections();
+      const data = await getCollections(currentUserId);
       setCollections(data);
     } catch (err) {
       console.error("Error loading collections", err);
     }
   };
 
-  // Load history
+  // Load history from backend or localStorage
   const loadHistory = async () => {
     try {
       if (user) {
         // Fetch logged-in user's history from backend
-        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/history?userId=${user.uid}`);
+        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/history?userId=${currentUserId}`);
         const data = await res.json();
         setHistoryItems(data);
       } else if (skippedLogin) {
@@ -63,6 +73,7 @@ export default function App() {
     setPanelOpen(null);
   };
 
+  // Handle completed API request
   const handleRequestComplete = async (response) => {
     setResponseData(response);
 
@@ -74,7 +85,7 @@ export default function App() {
       body: response.body,
       responseData: response.data,
       createdAt: new Date(),
-      userId: user?.uid || null,
+      userId: currentUserId,
     };
 
     if (user) {
@@ -90,16 +101,18 @@ export default function App() {
       localStorage.setItem("historyItems", JSON.stringify([newItem, ...localHistory]));
     }
 
-    setHistoryItems(prev => [newItem, ...prev]);
+    setHistoryItems((prev) => [newItem, ...prev]);
     setSelectedHistoryItem(newItem);
   };
 
+  // Create a new collection
   const handleCreateCollection = async (name) => {
-    const created = await createCollection(name);
-    setCollections(prev => [created, ...prev]);
+    const created = await createCollection(name, currentUserId);
+    setCollections((prev) => [created, ...prev]);
     return created;
   };
 
+  // Add selected request to a collection
   const handleAddToCollection = async (collection) => {
     if (!selectedHistoryItem) return;
     await addRequestToCollection(collection.id, selectedHistoryItem.id);
