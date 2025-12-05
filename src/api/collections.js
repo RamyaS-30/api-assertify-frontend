@@ -1,9 +1,8 @@
 const BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 export const getCollections = async (token) => {
-  const headers = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-
+  if (!token) return []; // guest fallback
+  const headers = { Authorization: `Bearer ${token}` };
   const res = await fetch(`${BASE_URL}/collections`, { headers });
   return res.json();
 };
@@ -11,7 +10,6 @@ export const getCollections = async (token) => {
 export const createCollection = async (name, token) => {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-
   const res = await fetch(`${BASE_URL}/collections`, {
     method: "POST",
     headers,
@@ -23,7 +21,6 @@ export const createCollection = async (name, token) => {
 export const addRequestToCollection = async (collectionId, requestId, token) => {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-
   const res = await fetch(`${BASE_URL}/collection-items`, {
     method: "POST",
     headers,
