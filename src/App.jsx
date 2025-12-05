@@ -20,6 +20,7 @@ export default function App() {
   const [showAddToCollection, setShowAddToCollection] = useState(false);
   const [refreshHistoryFlag, setRefreshHistoryFlag] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true); // <-- wait for auth
 
   const LOCAL_HISTORY_KEY = "guestHistory";
   const LOCAL_COLLECTIONS_KEY = "guestCollections";
@@ -28,7 +29,10 @@ export default function App() {
 
   // Auth listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => setCurrentUser(user));
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setLoadingAuth(false); // auth is ready
+    });
     return () => unsubscribe();
   }, []);
 
@@ -70,10 +74,13 @@ export default function App() {
     }
   };
 
+  // Only load after auth initialized
   useEffect(() => {
-    loadCollections();
-    loadHistory();
-  }, [currentUser]);
+    if (!loadingAuth) {
+      loadCollections();
+      loadHistory();
+    }
+  }, [currentUser, loadingAuth]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -105,7 +112,7 @@ export default function App() {
     };
 
     setHistoryItems(prev => {
-      const updated = [newItem, ...prev];
+      const updated = [newItem, ...prev.filter(h => h.id !== newItem.id)];
       if (!currentUser) saveLocalHistory(updated);
       return updated;
     });
@@ -126,7 +133,7 @@ export default function App() {
       setCollections(updated);
       saveLocalCollections(updated);
     }
-    setCollections(prev => [created, ...prev]);
+    setCollections(prev => [created, ...prev.filter(c => c.id !== created.id)]);
     return created;
   };
 
@@ -140,7 +147,7 @@ export default function App() {
     } else {
       const updatedCollections = collections.map(col => {
         if (col.id === collection.id) {
-          return { ...col, requests: [...(col.requests || []), selectedHistoryItem.id] };
+          return { ...col, requests: [...new Set([...(col.requests || []), selectedHistoryItem.id])] };
         }
         return col;
       });
@@ -153,7 +160,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
-
       {/* Desktop Sidebar */}
       <div className="hidden md:flex flex-[1] flex-col h-full border-r border-gray-300 dark:border-gray-700">
         <div className="h-1/2 overflow-y-auto">
