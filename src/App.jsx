@@ -5,9 +5,9 @@ import ApiForm from './components/ApiForm';
 import ResponseViewer from './components/ResponseViewer';
 import AddToCollectionModal from './components/AddToCollectionModal';
 import { getCollections, createCollection, addRequestToCollection } from './api/collections';
-import { fetchHistory } from './api/history';
+import { fetchHistory, sendApiRequest } from './api/history'; // create wrapper to pass token
 import { HiMenu, HiX } from 'react-icons/hi';
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase"; // your firebase config
 
 export default function App() {
@@ -35,7 +35,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // LocalStorage keys and helpers for guest users
+  // LocalStorage keys for guest users
   const LOCAL_HISTORY_KEY = "guestHistory";
   const LOCAL_COLLECTIONS_KEY = "guestCollections";
 
@@ -47,35 +47,35 @@ export default function App() {
 
   // Load collections
   const loadCollections = async () => {
-  try {
-    let data;
-    if (currentUser) {
-      const token = await currentUser.getIdToken();
-      data = await getCollections(token);
-    } else {
-      data = loadLocalCollections();
+    try {
+      let data;
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        data = await getCollections(token);
+      } else {
+        data = loadLocalCollections();
+      }
+      setCollections(data);
+    } catch (err) {
+      console.error("Error loading collections", err);
     }
-    setCollections(data);
-  } catch (err) {
-    console.error("Error loading collections", err);
-  }
-};
+  };
 
-  // Load full history
+  // Load history
   const loadHistory = async () => {
-  try {
-    let data;
-    if (currentUser) {
-      const token = await currentUser.getIdToken();
-      data = await fetchHistory(token);
-    } else {
-      data = loadLocalHistory();
+    try {
+      let data;
+      if (currentUser) {
+        const token = await currentUser.getIdToken();
+        data = await fetchHistory(token);
+      } else {
+        data = loadLocalHistory();
+      }
+      setHistoryItems(data);
+    } catch (err) {
+      console.error("Error loading history:", err);
     }
-    setHistoryItems(data);
-  } catch (err) {
-    console.error("Error loading history:", err);
-  }
-};
+  };
 
   // Initial load
   useEffect(() => {
@@ -83,19 +83,17 @@ export default function App() {
     loadHistory();
   }, [currentUser]);
 
-  // Optional: migrate guest data if user logs in
-  useEffect(() => {
-    if (currentUser) {
-      const guestHistory = loadLocalHistory();
-      const guestCollections = loadLocalCollections();
-      // Push to backend if needed (optional)
-      // TODO: implement Firebase migration API calls if desired
-      localStorage.removeItem(LOCAL_HISTORY_KEY);
-      localStorage.removeItem(LOCAL_COLLECTIONS_KEY);
-    }
-  }, [currentUser]);
+  // Logout function (clears token and guest data)
+  const handleLogout = async () => {
+    await signOut(auth);
+    setCurrentUser(null);
+    localStorage.removeItem(LOCAL_HISTORY_KEY);
+    localStorage.removeItem(LOCAL_COLLECTIONS_KEY);
+    setHistoryItems([]);
+    setCollections([]);
+  };
 
-  // Close dropdown if clicking outside
+  // Mobile menu
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!e.target.closest('#mobile-menu-button') && !e.target.closest('#mobile-menu-dropdown')) {
@@ -112,78 +110,74 @@ export default function App() {
   };
   const closePanel = () => setPanelOpen(null);
 
-  // Load history item into response viewer
   const loadHistoryItem = (item) => {
     setSelectedHistoryItem(item);
     setResponseData(item.responseData || null);
     closePanel();
   };
 
-  // When API form sends a request
-  const handleRequestComplete = (response) => {
+  // Handle API request response
+  const handleRequestComplete = async (response) => {
     setResponseData(response);
 
-    if (response?.requestId) {
-      const newItem = {
-        id: response.requestId,
-        url: response.url,
-        method: response.method,
-        headers: response.headers,
-        responseData: response.data,
-      };
+    const newItem = {
+      id: response?.requestId || Date.now().toString(),
+      url: response.url,
+      method: response.method,
+      headers: response.headers,
+      responseData: response.data,
+    };
 
-      setHistoryItems(prev => {
-        const updated = [newItem, ...prev];
-        if (!currentUser) saveLocalHistory(updated);
-        return updated;
-      });
+    setHistoryItems(prev => {
+      const updated = [newItem, ...prev];
+      if (!currentUser) saveLocalHistory(updated); // Save guest history locally
+      return updated;
+    });
 
-      setSelectedHistoryItem(newItem);
-      setShowAddToCollection(true);
-    }
+    setSelectedHistoryItem(newItem);
+    setShowAddToCollection(true);
 
     triggerHistoryRefresh();
   };
 
   // Create new collection
   const handleCreateCollection = async (name) => {
-  let created;
-  if (currentUser) {
-    const token = await currentUser.getIdToken();
-    created = await createCollection(name, token);
-  } else {
-    created = { id: Date.now().toString(), name, requests: [] };
-    const updated = [created, ...collections];
-    setCollections(updated);
-    saveLocalCollections(updated);
-  }
-  setCollections(prev => [created, ...prev]);
-  return created;
-};
+    let created;
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      created = await createCollection(name, token);
+    } else {
+      created = { id: Date.now().toString(), name, requests: [] };
+      const updated = [created, ...collections];
+      setCollections(updated);
+      saveLocalCollections(updated);
+    }
+    setCollections(prev => [created, ...prev]);
+    return created;
+  };
 
-  // Add selected history item to collection
+  // Add history item to collection
   const handleAddToCollection = async (collection) => {
-  if (!selectedHistoryItem) return;
+    if (!selectedHistoryItem) return;
 
-  if (currentUser) {
-    const token = await currentUser.getIdToken();
-    await addRequestToCollection(collection.id, selectedHistoryItem.id, token);
-    await loadCollections();
-  } else {
-    const updatedCollections = collections.map(col => {
-      if (col.id === collection.id) {
-        return { ...col, requests: [...(col.requests || []), selectedHistoryItem.id] };
-      }
-      return col;
-    });
-    setCollections(updatedCollections);
-    saveLocalCollections(updatedCollections);
-  }
+    if (currentUser) {
+      const token = await currentUser.getIdToken();
+      await addRequestToCollection(collection.id, selectedHistoryItem.id, token);
+      await loadCollections();
+    } else {
+      const updatedCollections = collections.map(col => {
+        if (col.id === collection.id) {
+          return { ...col, requests: [...(col.requests || []), selectedHistoryItem.id] };
+        }
+        return col;
+      });
+      setCollections(updatedCollections);
+      saveLocalCollections(updatedCollections);
+    }
 
-  setShowAddToCollection(false);
-};
+    setShowAddToCollection(false);
+  };
 
-  // Expose global function for legacy usage (optional)
   window.handleAddHistoryToCollection = (historyItem) => {
     setSelectedHistoryItem(historyItem);
     setShowAddToCollection(true);
@@ -194,71 +188,37 @@ export default function App() {
 
       {/* Desktop Sidebar */}
       <div className="hidden md:flex flex-[1] flex-col h-full border-r border-gray-300 dark:border-gray-700">
-
-  {/* Top Half — History */}
-  <div className="h-1/2 overflow-y-auto">
-    <Sidebar 
-      loadHistoryItem={loadHistoryItem}
-      refreshFlag={refreshHistoryFlag}
-      historyItems={historyItems}
-    />
-  </div>
-
-  {/* Bottom Half — Collections */}
-  <div className="h-1/2 overflow-y-auto border-t border-gray-300 dark:border-gray-700">
-    <CollectionsSidebar
-      collections={collections}
-      historyItems={historyItems}
-      onSelectCollection={loadHistoryItem}
-      onCreateCollection={handleCreateCollection}
-      onAddToCollection={handleAddToCollection}
-    />
-  </div>
-
-</div>
+        <div className="h-1/2 overflow-y-auto">
+          <Sidebar loadHistoryItem={loadHistoryItem} refreshFlag={refreshHistoryFlag} historyItems={historyItems} />
+        </div>
+        <div className="h-1/2 overflow-y-auto border-t border-gray-300 dark:border-gray-700">
+          <CollectionsSidebar
+            collections={collections}
+            historyItems={historyItems}
+            onSelectCollection={loadHistoryItem}
+            onCreateCollection={handleCreateCollection}
+            onAddToCollection={handleAddToCollection}
+          />
+        </div>
+      </div>
 
       {/* API Form */}
       <div className="flex-[2] flex flex-col h-full min-w-0">
-        {/* Mobile Top Bar */}
         <div className="md:hidden flex justify-between items-center p-3 border-b border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 relative z-50">
-          <button
-            id="mobile-menu-button"
-            className="focus:outline-none"
-            onClick={() => setMenuOpen(prev => !prev)}
-          >
+          <button id="mobile-menu-button" className="focus:outline-none" onClick={() => setMenuOpen(prev => !prev)}>
             <HiMenu className="w-7 h-7 text-primary-dark dark:text-primary-light"/>
           </button>
           <span className="font-semibold text-lg text-primary-dark dark:text-primary-light">API-Assertify</span>
           <div className="w-7 h-7" />
-
-          {/* Mobile Dropdown */}
           {menuOpen && (
-            <div
-              id="mobile-menu-dropdown"
-              className="absolute top-full left-2 mt-2 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50"
-            >
-              <button
-                className="w-full text-left px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
-                onClick={() => openPanel('sidebar')}
-              >
-                History
-              </button>
-              <button
-                className="w-full text-left px-4 py-2 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
-                onClick={() => openPanel('response')}
-              >
-                Response
-              </button>
+            <div id="mobile-menu-dropdown" className="absolute top-full left-2 mt-2 w-44 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg z-50">
+              <button className="w-full text-left px-4 py-2" onClick={() => openPanel('sidebar')}>History</button>
+              <button className="w-full text-left px-4 py-2" onClick={() => openPanel('response')}>Response</button>
             </div>
           )}
         </div>
-
-        {/* API Form Content */}
         <div className="flex-1 min-h-0 overflow-auto">
-          <ApiForm
-            setResponseData={handleRequestComplete}
-            historyItem={selectedHistoryItem}
-          />
+          <ApiForm setResponseData={handleRequestComplete} historyItem={selectedHistoryItem} />
         </div>
       </div>
 
@@ -267,51 +227,33 @@ export default function App() {
         <ResponseViewer response={responseData} />
       </div>
 
-      {/* Mobile overlay */}
-      {(panelOpen === 'sidebar' || panelOpen === 'response') && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 z-40 md:hidden" onClick={closePanel} />
-      )}
+      {/* Mobile overlays */}
+      {(panelOpen === 'sidebar' || panelOpen === 'response') && <div className="fixed inset-0 bg-black bg-opacity-40 z-40 md:hidden" onClick={closePanel} />}
 
       {/* Mobile Sidebar */}
-      <div
-        className={`fixed top-0 left-0 z-50 h-full w-72 bg-gray-50 dark:bg-gray-900 p-4 border-r border-gray-300 dark:border-gray-700 shadow-xl transform transition-transform duration-300 md:hidden
-          ${panelOpen === 'sidebar' ? 'translate-x-0' : '-translate-x-full'}`}
-      >
+      <div className={`fixed top-0 left-0 z-50 h-full w-72 bg-gray-50 dark:bg-gray-900 p-4 border-r border-gray-300 dark:border-gray-700 shadow-xl transform transition-transform duration-300 md:hidden ${panelOpen === 'sidebar' ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">History & Collections</h2>
           <HiX className="w-6 h-6 cursor-pointer" onClick={closePanel} />
         </div>
         <div className="flex flex-col h-full">
-
-  {/* History — top half */}
-  <div className="h-1/2 overflow-y-auto pr-1">
-    <Sidebar 
-      loadHistoryItem={loadHistoryItem}
-      refreshFlag={refreshHistoryFlag}
-      historyItems={historyItems}
-    />
-  </div>
-
-  {/* Collections — bottom half */}
-  <div className="h-1/2 overflow-y-auto border-t border-gray-300 dark:border-gray-700 pr-1">
-    <CollectionsSidebar
-      collections={collections}
-      historyItems={historyItems}
-      onSelectCollection={loadHistoryItem}
-      onCreateCollection={handleCreateCollection}
-      onAddToCollection={handleAddToCollection}
-    />
-  </div>
-
-</div>
-
+          <div className="h-1/2 overflow-y-auto pr-1">
+            <Sidebar loadHistoryItem={loadHistoryItem} refreshFlag={refreshHistoryFlag} historyItems={historyItems} />
+          </div>
+          <div className="h-1/2 overflow-y-auto border-t border-gray-300 dark:border-gray-700 pr-1">
+            <CollectionsSidebar
+              collections={collections}
+              historyItems={historyItems}
+              onSelectCollection={loadHistoryItem}
+              onCreateCollection={handleCreateCollection}
+              onAddToCollection={handleAddToCollection}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Mobile Response */}
-      <div
-        className={`fixed top-0 right-0 z-50 h-full w-72 bg-gray-50 dark:bg-gray-900 p-4 border-l border-gray-300 dark:border-gray-700 shadow-xl transform transition-transform duration-300 md:hidden
-          ${panelOpen === 'response' ? 'translate-x-0' : 'translate-x-full'}`}
-      >
+      <div className={`fixed top-0 right-0 z-50 h-full w-72 bg-gray-50 dark:bg-gray-900 p-4 border-l border-gray-300 dark:border-gray-700 shadow-xl transform transition-transform duration-300 md:hidden ${panelOpen === 'response' ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">Response</h2>
           <HiX className="w-6 h-6 cursor-pointer" onClick={closePanel} />
