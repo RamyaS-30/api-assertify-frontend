@@ -1,15 +1,13 @@
-import axios from 'axios';
+import axios from "axios";
 
-export const fetchHistory = async (token) => {
-  try {
-    const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/history`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-    return res.data;
-  } catch (err) {
-    console.error("Failed to fetch history:", err);
-    return [];
-  }
+const API_URL = process.env.VITE_BACKEND_URL;
+
+export const fetchHistory = async (userId) => {
+  if (!userId) throw new Error("userId is required to fetch history");
+  
+  const res = await axios.get(`${API_URL}/history`, {
+    params: { userId }, // <- critical: adds ?userId=XYZ
+  });
+
+  return res.data;
 };
