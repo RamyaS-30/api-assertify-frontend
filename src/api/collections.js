@@ -1,39 +1,24 @@
-// api/collections.js
-import axios from "axios";
-
 const BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
-// Fetch collections for a specific user
-export const getCollections = async (userId) => {
-  try {
-    const res = await axios.get(`${BASE_URL}/collections`, {
-      params: { userId },
-    });
-    return res.data;
-  } catch (err) {
-    console.error("Failed to fetch collections:", err);
-    return [];
-  }
+export const getCollections = async () => {
+  const res = await fetch(`${BASE_URL}/collections`);
+  return res.json();
 };
 
-// Create a new collection for a specific user
-export const createCollection = async (name, userId) => {
-  try {
-    const res = await axios.post(`${BASE_URL}/collections`, { name, userId });
-    return res.data;
-  } catch (err) {
-    console.error("Failed to create collection:", err);
-    throw err;
-  }
+export const createCollection = async (name) => {
+  const res = await fetch(`${BASE_URL}/collections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return res.json();
 };
 
-// Add a request (history item) to a collection
 export const addRequestToCollection = async (collectionId, requestId) => {
-  try {
-    const res = await axios.post(`${BASE_URL}/collections/${collectionId}/add`, { requestId });
-    return res.data;
-  } catch (err) {
-    console.error("Failed to add request to collection:", err);
-    throw err;
-  }
+  const res = await fetch(`${BASE_URL}/collection-items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ collectionId, requestId }),
+  });
+  return res.json();
 };
