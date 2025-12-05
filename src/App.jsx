@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import Sidebar from './components/Sidebar';
-import CollectionsSidebar from './components/CollectionsSidebar';
-import ApiForm from './components/ApiForm';
-import ResponseViewer from './components/ResponseViewer';
-import AddToCollectionModal from './components/AddToCollectionModal';
-import { getCollections, createCollection, addRequestToCollection } from './api/collections';
-import { fetchHistory, sendApiRequest } from './api/history';
-import { HiMenu, HiX } from 'react-icons/hi';
+import { useState, useEffect } from "react";
+import Sidebar from "./components/Sidebar";
+import CollectionsSidebar from "./components/CollectionsSidebar";
+import ApiForm from "./components/ApiForm";
+import ResponseViewer from "./components/ResponseViewer";
+import AddToCollectionModal from "./components/AddToCollectionModal";
+import { getCollections, createCollection, addRequestToCollection } from "./api/collections";
+import { fetchHistory, sendApiRequest } from "./api/history";
+import { HiMenu, HiX } from "react-icons/hi";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -16,28 +16,25 @@ export default function App() {
   const [responseData, setResponseData] = useState(null);
   const [historyItems, setHistoryItems] = useState([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
-
   const [collections, setCollections] = useState([]);
   const [showAddToCollection, setShowAddToCollection] = useState(false);
-
   const [refreshHistoryFlag, setRefreshHistoryFlag] = useState(false);
-  const triggerHistoryRefresh = () => setRefreshHistoryFlag(prev => !prev);
-
   const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
 
   const LOCAL_HISTORY_KEY = "guestHistory";
   const LOCAL_COLLECTIONS_KEY = "guestCollections";
 
+  const triggerHistoryRefresh = () => setRefreshHistoryFlag(prev => !prev);
+
+  // Auth listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => setCurrentUser(user));
+    return () => unsubscribe();
+  }, []);
+
+  // Local storage helpers
   const loadLocalHistory = () => JSON.parse(localStorage.getItem(LOCAL_HISTORY_KEY)) || [];
   const saveLocalHistory = (history) => localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(history));
-
   const loadLocalCollections = () => JSON.parse(localStorage.getItem(LOCAL_COLLECTIONS_KEY)) || [];
   const saveLocalCollections = (collections) => localStorage.setItem(LOCAL_COLLECTIONS_KEY, JSON.stringify(collections));
 
@@ -46,15 +43,14 @@ export default function App() {
     try {
       let data;
       if (currentUser) {
-        const token = await currentUser.getIdToken(true);
+        const token = await currentUser.getIdToken();
         data = await getCollections(token);
       } else {
         data = loadLocalCollections();
       }
-      setCollections(data || []);
+      setCollections(data);
     } catch (err) {
       console.error("Error loading collections", err);
-      setCollections([]); // fallback
     }
   };
 
@@ -63,24 +59,20 @@ export default function App() {
     try {
       let data;
       if (currentUser) {
-        const token = await currentUser.getIdToken(true);
+        const token = await currentUser.getIdToken();
         data = await fetchHistory(token);
       } else {
         data = loadLocalHistory();
       }
-      setHistoryItems(data || []);
+      setHistoryItems(data);
     } catch (err) {
       console.error("Error loading history:", err);
-      setHistoryItems([]); // fallback
     }
   };
 
-  // Load data only after currentUser is initialized
   useEffect(() => {
-    if (currentUser !== null) {
-      loadCollections();
-      loadHistory();
-    }
+    loadCollections();
+    loadHistory();
   }, [currentUser]);
 
   const handleLogout = async () => {
@@ -92,21 +84,7 @@ export default function App() {
     setCollections([]);
   };
 
-  // Mobile menu
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (!e.target.closest('#mobile-menu-button') && !e.target.closest('#mobile-menu-dropdown')) {
-        setMenuOpen(false);
-      }
-    };
-    if (menuOpen) document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [menuOpen]);
-
-  const openPanel = (panel) => {
-    setPanelOpen(panel);
-    setMenuOpen(false);
-  };
+  const openPanel = (panel) => setPanelOpen(panel);
   const closePanel = () => setPanelOpen(null);
 
   const loadHistoryItem = (item) => {
@@ -134,14 +112,13 @@ export default function App() {
 
     setSelectedHistoryItem(newItem);
     setShowAddToCollection(true);
-
     triggerHistoryRefresh();
   };
 
   const handleCreateCollection = async (name) => {
     let created;
     if (currentUser) {
-      const token = await currentUser.getIdToken(true);
+      const token = await currentUser.getIdToken();
       created = await createCollection(name, token);
     } else {
       created = { id: Date.now().toString(), name, requests: [] };
@@ -157,7 +134,7 @@ export default function App() {
     if (!selectedHistoryItem) return;
 
     if (currentUser) {
-      const token = await currentUser.getIdToken(true);
+      const token = await currentUser.getIdToken();
       await addRequestToCollection(collection.id, selectedHistoryItem.id, token);
       await loadCollections();
     } else {
@@ -172,11 +149,6 @@ export default function App() {
     }
 
     setShowAddToCollection(false);
-  };
-
-  window.handleAddHistoryToCollection = (historyItem) => {
-    setSelectedHistoryItem(historyItem);
-    setShowAddToCollection(true);
   };
 
   return (
