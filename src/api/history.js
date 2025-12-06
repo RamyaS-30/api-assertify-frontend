@@ -1,32 +1,23 @@
 import axios from "axios";
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL;
-
-// Fetch request history
 export const fetchHistory = async (token) => {
+  if (!token) return [];
   try {
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/history`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-    const res = await axios.get(`${BASE_URL}/history`, { headers });
-
-    // Ensure always array
-    return Array.isArray(res.data) ? res.data : [];
+    return res.data.map((item) => ({
+      id: item.id,
+      url: item.url,
+      method: item.method,
+      headers: item.headers ?? {},
+      params: item.params ?? {},
+      body: item.body ?? null,
+      responseData: item.responseData ?? {},
+    }));
   } catch (err) {
-    console.error("Failed to fetch history:", err?.response?.data || err);
-    return []; // fallback for guest or backend error
-  }
-};
-
-// Send API request through backend proxy
-export const sendApiRequest = async (payload, token) => {
-  try {
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-    const res = await axios.post(`${BASE_URL}/proxy`, payload, { headers });
-
-    return res.data;
-  } catch (err) {
-    console.error("Failed to send API request:", err?.response?.data || err);
-    throw err;
+    console.error("Failed to fetch history:", err);
+    return [];
   }
 };
