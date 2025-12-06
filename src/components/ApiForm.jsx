@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { sendProxyRequest } from '../api/api';
-import { getAuth } from "firebase/auth";
 
-export default function ApiForm({ setResponseData, historyItem }) {
+export default function ApiForm({ setResponseData, historyItem, token }) {
   const [url, setUrl] = useState('');
   const [method, setMethod] = useState('GET');
   const [headers, setHeaders] = useState('');
@@ -12,19 +11,18 @@ export default function ApiForm({ setResponseData, historyItem }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const auth = getAuth();
-
   // Prefill form when a history item is selected
-  useEffect(() => {
-    if (historyItem) {
-      setUrl(historyItem.url || '');
-      setMethod(historyItem.method || 'GET');
-      setHeaders(historyItem.headers ? JSON.stringify(historyItem.headers, null, 2) : '');
-      setParams(historyItem.params ? JSON.stringify(historyItem.params, null, 2) : '');
-      setBody(historyItem.body ? JSON.stringify(historyItem.body, null, 2) : '');
-      //setResponseData(historyItem.responseData || null);
-    }
-  }, [historyItem, setResponseData]);
+  
+useEffect(() => { 
+  if (historyItem) { 
+    setUrl(historyItem.url || ''); 
+    setMethod(historyItem.method || 'GET'); 
+    setHeaders(historyItem.headers ? JSON.stringify(historyItem.headers, null, 2) : ''); 
+    setParams(historyItem.params ? JSON.stringify(historyItem.params, null, 2) : ''); 
+    setBody(historyItem.body ? JSON.stringify(historyItem.body, null, 2) : ''); 
+    //setResponseData(historyItem.responseData || null); 
+  } 
+}, [historyItem, setResponseData]); 
 
   const isValidJson = (str) => {
     if (!str.trim()) return true;
@@ -33,56 +31,74 @@ export default function ApiForm({ setResponseData, historyItem }) {
   };
 
   const handleSend = async () => {
-    const newErrors = {};
-    if (!url.trim()) newErrors.url = 'URL is required';
-    if (!isValidJson(headers)) newErrors.headers = 'Invalid JSON';
-    if (!isValidJson(params)) newErrors.params = 'Invalid JSON';
-    if ((method === 'POST' || method === 'PUT') && !isValidJson(body)) newErrors.body = 'Invalid JSON';
+  const newErrors = {};
 
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
+  if (!url.trim()) newErrors.url = "URL is required";
+  if (!isValidJson(headers)) newErrors.headers = "Invalid JSON";
+  if (!isValidJson(params)) newErrors.params = "Invalid JSON";
+  if ((method === "POST" || method === "PUT") && !isValidJson(body)) {
+    newErrors.body = "Invalid JSON";
+  }
 
-    setLoading(true);
-    setResponseData(null);
+  setErrors(newErrors);
+  if (Object.keys(newErrors).length > 0) return;
 
-    try {
-      const headersObj = headers ? JSON.parse(headers) : {};
-      const paramsObj = params ? JSON.parse(params) : {};
-      const bodyObj = (method === "POST" || method === "PUT") ? (body ? JSON.parse(body) : {}) : null;
+  setLoading(true);
+  //setResponseData(null);
 
-      // Add Firebase token if logged-in
-      const user = auth.currentUser;
-      if (user) {
-        const token = await user.getIdToken();
-        headersObj['Authorization'] = `Bearer ${token}`;
-      }
+  try {
+    const headersObj = headers ? JSON.parse(headers) : {};
+    const paramsObj = params ? JSON.parse(params) : {};
+    const bodyObj =
+      method === "POST" || method === "PUT"
+        ? body
+          ? JSON.parse(body)
+          : {}
+        : null;
 
-      // Build final URL for GET
-      let finalUrl = url;
-      if (method === "GET" && Object.keys(paramsObj).length > 0) {
-        const urlObj = new URL(url);
-        Object.entries(paramsObj).forEach(([key, value]) =>
-          urlObj.searchParams.append(key, value)
-        );
-        finalUrl = urlObj.toString();
-      }
-
-      // Send request via backend proxy
-      const res = await sendProxyRequest({
-        url: finalUrl,
-        method,
-        headers: headersObj,
-        params: paramsObj, 
-        body: bodyObj
-      });
-
-      setResponseData(res);
-    } catch (err) {
-      setResponseData({ success: false, error: err.message });
-    } finally {
-      setLoading(false);
+    let finalUrl = url;
+    if (method === "GET" && Object.keys(paramsObj).length > 0) {
+      const urlObj = new URL(url);
+      Object.entries(paramsObj).forEach(([key, value]) =>
+        urlObj.searchParams.append(key, value)
+      );
+      finalUrl = urlObj.toString();
     }
-  };
+
+    const backendResponse = await sendProxyRequest({
+      url: finalUrl,
+      method,
+      headers: headersObj,
+      params: paramsObj,
+      body: bodyObj,
+      token,
+    });
+
+    // ⭐ IMPORTANT FIX: Use backendResponse.response
+    setResponseData({
+      requestId: crypto.randomUUID(),
+      url,
+      method,
+      headers: headersObj,
+      params: paramsObj,
+      body: bodyObj,
+      data: backendResponse.success ? backendResponse.response : { success: false, error: backendResponse.error || "No response from backend" },
+    });
+
+  } catch (err) {
+    setResponseData({
+      requestId: crypto.randomUUID(),
+      url,
+      method,
+      headers: {},
+      params: {},
+      body: null,
+      data: { success: false, error: err.message },
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="flex-1 flex flex-col p-6 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-w-0">
