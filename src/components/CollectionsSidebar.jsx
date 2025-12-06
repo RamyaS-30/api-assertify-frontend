@@ -16,10 +16,10 @@ export default function CollectionsSidebar({ collections, historyItems, onSelect
 
   // Helper to get full request info by ID from historyItems
   const findRequestById = (id) => {
-  const found = historyItems.find(item => String(item.id) === String(id));
-  if (!found) console.warn(`No history item found for ID: ${id}`);
-  return found;
-};
+    const found = historyItems.find(item => String(item.id) === String(id));
+    if (!found) console.warn(`No history item found for ID: ${id}`);
+    return found;
+  };
 
   return (
     <div className="flex flex-col h-full p-4 border-t border-gray-300 dark:border-gray-700 overflow-auto">
@@ -64,15 +64,16 @@ export default function CollectionsSidebar({ collections, historyItems, onSelect
 
             {expandedCollection === col.id && col.items && col.items.length > 0 && (
               <ul className="ml-4 mt-1 space-y-1">
-                {col.items.map((itemId, idx) => {
-                  const item = findRequestById(itemId);
+                {col.items.map((itemOrId, idx) => {
+                  // Support both guest objects or stored IDs
+                  let item = typeof itemOrId === "string" ? findRequestById(itemOrId) : itemOrId;
                   return (
                     <li
                       key={item?.id || idx}
                       className="px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 text-sm cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-600"
                       onClick={() => onSelectCollection && item && onSelectCollection(item)}
                     >
-                      {item ? `${item.method} - ${item.url}` : `Unknown Request ID: ${itemId}`}
+                      {item ? `${item.method} - ${item.url}` : `Unknown Request`}
                     </li>
                   );
                 })}
